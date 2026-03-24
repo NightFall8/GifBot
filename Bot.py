@@ -1,46 +1,27 @@
-import discord
+import discord, requests, random, io, numpy as np, imageio.v2 as imageio, json
 from discord.ext import commands
-import requests
-import random
-import io
-import numpy as np
 from PIL import Image, ImageSequence
-import imageio.v2 as imageio
 
-# ================= CONFIG =================
-TOKEN = "YOUR_DISCORD_BOT_TOKEN"
-GIPHY_API_KEY = "YOUR_GIPHY_KEY"
-
-CANVAS_SIZE = (500, 500)
-MAX_GIFS = 4
-MAX_FRAMES = 40
-FRAME_DURATION = 0.06
-
-HEADERS = {"User-Agent": "Mozilla/5.0"}
-
-MIN_WIDTH = 80
-MIN_HEIGHT = 80
-MAX_FETCH_TRIES = 10
-
+config = json.load(open("config.json"))
 # ==========================================
 
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix=config["prefix"], intents=intents)
 
 
 # -------- GIPHY SEARCH --------
 def search_gifs(query, limit=30):
     url = "https://api.giphy.com/v1/gifs/search"
     params = {
-        "api_key": GIPHY_API_KEY,
+        "api_key": config["giphy_key"],
         "q": query,
         "limit": limit,
         "rating": "pg-13"
     }
 
     try:
-        r = requests.get(url, params=params, headers=HEADERS, timeout=10)
+        r = requests.get(url, params=params, headers=config["headers"], timeout=10)
         data = r.json().get("data", [])
     except:
         return []
@@ -59,7 +40,7 @@ def search_gifs(query, limit=30):
 # -------- DOWNLOAD + VALIDATE --------
 def load_gif(url):
     try:
-        r = requests.get(url, headers=HEADERS, timeout=10)
+        r = requests.get(url, headers=config["headers"], timeout=10)
         img = Image.open(io.BytesIO(r.content))
     except:
         return None
@@ -72,15 +53,15 @@ def load_gif(url):
         return None
 
     # filter tiny gifs
-    if frames[0].width < MIN_WIDTH or frames[0].height < MIN_HEIGHT:
+    if frames[0].width < config["min_width"] or frames[0].height < config["min_height"]:
         return None
 
-    return frames[:MAX_FRAMES]
+    return frames[:config["max_frames"]]
 
 
 # -------- PICK WORKING GIF --------
 def get_valid_gif(urls):
-    for _ in range(MAX_FETCH_TRIES):
+    for _ in range(config["max_fetch_tries"]):
         url = random.choice(urls)
         frames = load_gif(url)
         if frames:
@@ -93,7 +74,7 @@ def get_valid_gif(urls):
 def get_random_background():
     urls = search_gifs("landscape background sky", 25)
 
-    for _ in range(MAX_FETCH_TRIES):
+    for _ in range(config["max_fetch_tries"]):
         if not urls:
             break
 
@@ -102,15 +83,15 @@ def get_random_background():
             return frames
 
     # fallback gradient (only if everything fails)
-    w, h = CANVAS_SIZE
+    w, h = config["canvas_size_x"], config["canvas_size_y"]
     fallback = Image.new("RGBA", (w, h), (30, 30, 60, 255))
     return [fallback]
 
 
 # -------- RANDOM POSITION --------
 def random_position(size):
-    max_x = CANVAS_SIZE[0] - size[0]
-    max_y = CANVAS_SIZE[1] - size[1]
+    max_x = config["canvas_size_x"] - size[0]
+    max_y = config["canvas_size_y"] - size[1]
 
     if max_x <= 0 or max_y <= 0:
         return (0, 0)
@@ -125,13 +106,13 @@ def random_position(size):
 def build_gif(query):
     urls = search_gifs(query)
 
-    if len(urls) < MAX_GIFS:
+    if len(urls) < config["max_gifs"]:
         raise Exception("Not enough GIFs found")
 
     gif_layers = []
 
     attempts = 0
-    while len(gif_layers) < MAX_GIFS and attempts < MAX_FETCH_TRIES * 2:
+    while len(gif_layers) < config["max_gifs"] and attempts < config["max_fetch_tries"] * 2:
         frames = get_valid_gif(urls)
         attempts += 1
 
@@ -155,7 +136,7 @@ def build_gif(query):
             "pos": pos
         })
 
-    if len(gif_layers) < MAX_GIFS:
+    if len(gif_layers) < config["max_gifs"]:
         raise Exception("Couldn't build enough valid GIF layers")
 
     bg_frames = get_random_background()
@@ -168,11 +149,11 @@ def build_gif(query):
     output_frames = []
 
     for i in range(total_frames):
-        canvas = Image.new("RGBA", CANVAS_SIZE)
+        canvas = Image.new("RGBA", (config["canvas_size_x"], config["canvas_size_y"]))
 
         # background
         bg = bg_frames[i % len(bg_frames)].resize(
-            CANVAS_SIZE,
+            (config["canvas_size_x"], config["canvas_size_y"]),
             Image.Resampling.LANCZOS
         )
         canvas.paste(bg, (0, 0))
@@ -188,25 +169,32 @@ def build_gif(query):
     imageio.mimsave(
         output,
         output_frames,
-        format="GIF",
-        duration=FRAME_DURATION
-    )
+        format="GIF", # type: ignore
+        duration=config["frame_duration"]
+    ) # type: ignore
     output.seek(0)
 
     return output
 
 
 # -------- COMMAND --------
-@bot.command()
-async def gif(ctx, *, query="random"):
+@bot.hybrid_command(name="gif", description="Generate a random GIF based on your query")
+async def gif(ctx: commands.Context, *, query="random"):
     try:
-        await ctx.message.add_reaction("👍")
+        if ctx.interaction:
+            await ctx.defer()
+        else:
+            await ctx.message.add_reaction("👍")
         gif_file = build_gif(query)
         await ctx.send(file=discord.File(gif_file, "gif.gif"))
 
     except Exception as e:
         await ctx.send(f"Error: {e}")
 
+@bot.event
+async def on_ready():
+    await bot.tree.sync()
+    print(f"Logged in as {bot.user} and commands synced.")
 
 # -------- RUN --------
-bot.run(TOKEN)
+bot.run(config["token"])

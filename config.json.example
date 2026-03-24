@@ -1,0 +1,14 @@
+{
+	"token":"YOUR_DISCORD_BOT_TOKEN",
+	"giphy_key":"YOUR_GIPHY_KEY",
+	"canvas_size_x":500,
+	"canvas_size_y":500,
+	"max_gifs":4,
+	"max_frames":40,
+	"frame_duration":0.06,
+	"headers":{"User-Agent": "Mozilla/5.0"},
+	"min_width":80,
+	"min_height":80,
+	"max_fetch_tries":10,
+	"prefix":"!"
+}
