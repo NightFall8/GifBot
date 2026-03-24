@@ -170,14 +170,36 @@ def build_gif(query):
         output,
         output_frames,
         format="GIF", # type: ignore
-        duration=config["frame_duration"]
+        duration=config["frame_duration"],
+        loop=0
     ) # type: ignore
     output.seek(0)
 
     return output
 
+# # -------- SINGULAR GIF --------
+# def build_singular_gif(query):
+#     url = search_gifs(query)
 
-# -------- COMMAND --------
+#     if not url:
+#         raise Exception("No GIF found")
+#     frames = get_valid_gif(url)
+#     if not frames:
+#         raise Exception("No valid GIF found")
+#     output = io.BytesIO()
+#     imageio.mimsave(
+#         output,
+#         [np.array(f) for f in frames],
+#         format="GIF", # type: ignore
+#         duration=config["frame_duration"],
+#         loop=0
+#     ) # type: ignore
+#     output.seek(0)
+
+#     return output
+
+
+# -------- COMMANDS --------
 @bot.hybrid_command(name="gif", description="Generate a random GIF based on your query")
 async def gif(ctx: commands.Context, *, query="random"):
     try:
@@ -190,7 +212,22 @@ async def gif(ctx: commands.Context, *, query="random"):
 
     except Exception as e:
         await ctx.send(f"Error: {e}")
+        
+# @bot.hybrid_command(name="singular", description="Get a single random GIF based on your query")
+# async def singular(ctx: commands.Context, *, query="random"):
+#     try:
+#         if ctx.interaction:
+#             await ctx.defer()
+#         else:
+#             await ctx.message.add_reaction("👍")
+#         gif_file = build_singular_gif(query)
+#         await ctx.send(file=discord.File(gif_file, "gif.gif"))
 
+#     except Exception as e:
+#         await ctx.send(f"Error: {e}")
+
+
+# -------- EVENTS --------
 @bot.event
 async def on_ready():
     await bot.tree.sync()
