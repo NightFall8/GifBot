@@ -1,4 +1,4 @@
-import discord, requests, random, io, numpy as np, imageio.v2 as imageio, json
+import discord, requests, random, io, numpy as np, imageio.v2 as imageio, json, time
 from discord.ext import commands
 from PIL import Image, ImageSequence
 
@@ -11,9 +11,12 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix=config["prefix"], intents=intents)
 
+api_usage_timestamps = []
 
 # -------- GIPHY SEARCH --------
 def search_gifs(query, limit=30):
+    api_usage_timestamps.append(time.time())
+
     url = "https://api.giphy.com/v1/gifs/search"
     params = {
         "api_key": config["giphy_key"],
@@ -179,30 +182,8 @@ def build_gif(query):
 
     return output
 
-# # -------- SINGULAR GIF --------
-# def build_singular_gif(query):
-#     url = search_gifs(query)
-
-#     if not url:
-#         raise Exception("No GIF found")
-#     frames = get_valid_gif(url)
-#     if not frames:
-#         raise Exception("No valid GIF found")
-#     output = io.BytesIO()
-#     imageio.mimsave(
-#         output,
-#         [np.array(f) for f in frames],
-#         format="GIF", # type: ignore
-#         duration=config["frame_duration"],
-#         loop=0
-#     ) # type: ignore
-#     output.seek(0)
-
-#     return output
-
-
 # -------- COMMANDS --------
-@bot.hybrid_command(name="gif", description="Generate a random GIF based on your query")
+@bot.hybrid_command(name="gif", description="Generate a random GIF based on your query.")
 async def gif(ctx: commands.Context, *, query="random"):
     try:
         if ctx.interaction:
@@ -214,20 +195,24 @@ async def gif(ctx: commands.Context, *, query="random"):
 
     except Exception as e:
         await ctx.send(f"Error: {e}")
-        
-# @bot.hybrid_command(name="singular", description="Get a single random GIF based on your query")
-# async def singular(ctx: commands.Context, *, query="random"):
-#     try:
-#         if ctx.interaction:
-#             await ctx.defer()
-#         else:
-#             await ctx.message.add_reaction("👍")
-#         gif_file = build_singular_gif(query)
-#         await ctx.send(file=discord.File(gif_file, "gif.gif"))
 
-#     except Exception as e:
-#         await ctx.send(f"Error: {e}")
+@bot.hybrid_command(name="status", description="Check the api usage and bot latency.")
+async def status(ctx: commands.Context):
+    global api_usage_timestamps
+    
+    # Cleanup old timestamps (older than 1 hour)
+    now = time.time()
+    api_usage_timestamps = [t for t in api_usage_timestamps if now - t <= 3600]
 
+    embed = discord.Embed(title="Bot Status")
+    embed.add_field(name="Ping",
+                    value=f"{round(bot.latency * 1000)}ms",
+                    inline=False)
+    embed.add_field(name="API Usage",
+                    value=f"{len(api_usage_timestamps)}/1000 calls (past 1h)",
+                    inline=False)
+
+    await ctx.send(embed=embed)
 
 # -------- EVENTS --------
 @bot.event
